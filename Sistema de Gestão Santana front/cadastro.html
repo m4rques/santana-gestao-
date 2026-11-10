@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cadastros - Sant'Ana</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Ir para o conteúdo</a>
+<header class="top" id="top"></header>
+<main id="main">
+  <h1>Cadastros</h1>
+  <div class="two">
+    <section class="card" aria-labelledby="hc">
+      <h2 id="hc">Novo cliente</h2>
+      <form id="fc" novalidate>
+        <label for="nome">Nome completo</label><input id="nome" required autocomplete="off">
+        <label for="cpf">CPF ou CNPJ</label><input id="cpf" required inputmode="numeric" autocomplete="off">
+        <label for="tel">Telefone</label><input id="tel" type="tel" autocomplete="off">
+        <label for="mail">E-mail</label><input id="mail" type="email" autocomplete="off">
+        <label for="end">Endereço</label><input id="end" autocomplete="off">
+        <label for="cnh">Foto da CNH (necessária para test-drive)</label><input id="cnh" type="file" accept="image/*">
+        <label><input id="lgpd" type="checkbox"> Autorizo o uso dos meus dados pessoais conforme a LGPD.</label>
+        <button type="submit">Salvar cliente</button>
+        <div id="mc" class="msg" role="alert"></div>
+      </form>
+    </section>
+    <section class="card" aria-labelledby="hv">
+      <h2 id="hv">Novo veículo</h2>
+      <form id="fv" novalidate>
+        <label for="chassi">Chassi</label><input id="chassi" required autocomplete="off">
+        <label for="marca">Marca</label><input id="marca" required autocomplete="off">
+        <label for="modelo">Modelo</label><input id="modelo" required autocomplete="off">
+        <label for="ano">Ano</label><input id="ano" type="number" min="1980" max="2100" required>
+        <label for="tipo">Tipo</label>
+        <select id="tipo"><option>Novo</option><option>Seminovo</option></select>
+        <label for="km">Quilometragem</label><input id="km" type="number" min="0" value="0">
+        <label for="preco">Preço (R$)</label><input id="preco" type="number" min="0" step="0.01" required>
+        <button type="submit">Salvar veículo</button>
+        <div id="mv" class="msg" role="alert"></div>
+      </form>
+    </section>
+  </div>
+</main>
+<script src="app.js"></script>
+<script>
+shell('cadastro.html');
+$('#fc').onsubmit = async e => {
+  e.preventDefault();
+  const m = $('#mc'), cpf = $('#cpf').value.replace(/\D/g, '');
+  if (!$('#nome').value.trim()) return msg(m, 'Informe o nome completo.');
+  if (!docOk(cpf)) return msg(m, 'CPF ou CNPJ inválido. Confira os números digitados.');
+  if (!$('#lgpd').checked) return msg(m, 'O consentimento LGPD é obrigatório para salvar.');
+  try {
+    const r = await api('/clientes', 'POST', {
+      nome: $('#nome').value.trim(), cpf, telefone: $('#tel').value, email: $('#mail').value,
+      endereco: $('#end').value, cnh: $('#cnh').files[0]?.name || null, consentimento: true
+    });
+    msg(m, 'Cliente salvo. Código: ' + r.codigo, 'ok'); e.target.reset();
+  } catch (err) { msg(m, err.message); }
+};
+$('#fv').onsubmit = async e => {
+  e.preventDefault();
+  const m = $('#mv'), g = id => $('#' + id).value.trim();
+  if (!g('chassi') || !g('marca') || !g('modelo') || !g('ano') || !g('preco')) return msg(m, 'Preencha chassi, marca, modelo, ano e preço.');
+  try {
+    await api('/veiculos', 'POST', { chassi: g('chassi'), marca: g('marca'), modelo: g('modelo'), ano: +g('ano'), tipo: $('#tipo').value, km: +g('km') || 0, preco: +g('preco') });
+    msg(m, 'Veículo salvo com status Disponível.', 'ok'); e.target.reset();
+  } catch (err) { msg(m, err.message); }
+};
+</script>
+</body>
+</html>
