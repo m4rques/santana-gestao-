@@ -1,0 +1,147 @@
+### Para usar: instale a extensão "REST Client" no VS Code e clique em "Send Request" acima de cada bloco.
+### Rode o Main antes. Faça a sequência de cima para baixo.
+
+@host = http://localhost:8080
+
+### 1. Login como vendedor (guarde o token na variável abaixo)
+POST {{host}}/api/login
+Content-Type: application/json
+
+{"email": "vendedor@santana.com", "senha": "Vendedor@123"}
+
+###
+@vendedor = COLE_O_TOKEN_DO_VENDEDOR_AQUI
+
+### 2. Login como gerente
+POST {{host}}/api/login
+Content-Type: application/json
+
+{"email": "gerente@santana.com", "senha": "Gerente@123"}
+
+###
+@gerente = COLE_O_TOKEN_DO_GERENTE_AQUI
+
+### RF03 - cadastrar cliente com CNH (gera o código CLI-0001)
+POST {{host}}/api/clientes
+Authorization: Bearer {{vendedor}}
+Content-Type: application/json
+
+{"nome": "Maria Souza", "cpf": "529.982.247-25", "telefone": "71999990000", "cnh": "cnh_maria.jpg", "consentimento": true}
+
+### RF03 - repetir o mesmo CPF deve dar erro 409 (duplicidade)
+POST {{host}}/api/clientes
+Authorization: Bearer {{vendedor}}
+Content-Type: application/json
+
+{"nome": "Maria Souza", "cpf": "52998224725", "consentimento": true}
+
+### RF03 - cliente sem CNH (não poderá fazer test-drive)
+POST {{host}}/api/clientes
+Authorization: Bearer {{vendedor}}
+Content-Type: application/json
+
+{"nome": "Joao Lima", "cpf": "11144477735", "consentimento": true}
+
+### RF01 - vendedor não pode cadastrar veículo (403)
+POST {{host}}/api/veiculos
+Authorization: Bearer {{vendedor}}
+Content-Type: application/json
+
+{"chassi": "CH000099", "marca": "Jeep", "modelo": "Compass", "ano": 2024, "tipo": "Novo", "km": 0, "preco": 205000}
+
+### RF01 - gerente cadastra veículo (entra como Disponível)
+POST {{host}}/api/veiculos
+Authorization: Bearer {{gerente}}
+Content-Type: application/json
+
+{"chassi": "CH000099", "marca": "Jeep", "modelo": "Compass", "ano": 2024, "tipo": "Novo", "km": 0, "preco": 205000}
+
+### RF01 - tentar mudar status por transição proibida (Disponível -> Vendido) dá 409
+PUT {{host}}/api/veiculos/1/status
+Authorization: Bearer {{gerente}}
+Content-Type: application/json
+
+{"status": "Vendido"}
+
+### RF04 - agendar test-drive (ajuste a data para um dia futuro, horário entre 08:00 e 17:00)
+POST {{host}}/api/testdrives
+Authorization: Bearer {{vendedor}}
+Content-Type: application/json
+
+{"clienteCodigo": "CLI-0001", "veiculoId": 1, "dataHora": "2027-03-10T10:00"}
+
+### RF04 - mesmo veículo 30 minutos depois: horário bloqueado (409)
+POST {{host}}/api/testdrives
+Authorization: Bearer {{vendedor}}
+Content-Type: application/json
+
+{"clienteCodigo": "CLI-0001", "veiculoId": 1, "dataHora": "2027-03-10T10:30"}
+
+### RF04 - cliente sem CNH (409)
+POST {{host}}/api/testdrives
+Authorization: Bearer {{vendedor}}
+Content-Type: application/json
+
+{"clienteCodigo": "CLI-0002", "veiculoId": 2, "dataHora": "2027-03-10T14:00"}
+
+### RF05 - entregar a chave: Agendado -> Em andamento (veículo vira Em Test-Drive)
+PUT {{host}}/api/testdrives/1/status
+Authorization: Bearer {{vendedor}}
+Content-Type: application/json
+
+{"status": "Em andamento"}
+
+### RF05 - concluir exige feedback (sem feedback dá 400)
+PUT {{host}}/api/testdrives/1/status
+Authorization: Bearer {{vendedor}}
+Content-Type: application/json
+
+{"status": "Concluído", "feedback": "Cliente gostou do carro."}
+
+### RF06 - proposta com 2% de desconto: dentro da alçada do vendedor, nasce Aprovada
+POST {{host}}/api/propostas
+Authorization: Bearer {{vendedor}}
+Content-Type: application/json
+
+{"clienteCodigo": "CLI-0001", "veiculoId": 2, "descontoPct": 2, "pagamento": "À vista"}
+
+### RF06 - fechar a venda da proposta 1 (veículo vira Vendido)
+POST {{host}}/api/propostas/1/venda
+Authorization: Bearer {{vendedor}}
+
+### RF06 - proposta com 8% de desconto: acima da alçada, fica Aguardando aprovação
+POST {{host}}/api/propostas
+Authorization: Bearer {{vendedor}}
+Content-Type: application/json
+
+{"clienteCodigo": "CLI-0001", "veiculoId": 3, "descontoPct": 8, "pagamento": "Financiamento 48x"}
+
+### RF06 - vendedor não pode aprovar (403)
+PUT {{host}}/api/propostas/2/decisao
+Authorization: Bearer {{vendedor}}
+Content-Type: application/json
+
+{"aprovar": true}
+
+### RF06 - gerente aprova
+PUT {{host}}/api/propostas/2/decisao
+Authorization: Bearer {{gerente}}
+Content-Type: application/json
+
+{"aprovar": true}
+
+### Consultas
+GET {{host}}/api/veiculos?status=Disponível
+Authorization: Bearer {{vendedor}}
+
+###
+GET {{host}}/api/testdrives
+Authorization: Bearer {{vendedor}}
+
+###
+GET {{host}}/api/propostas
+Authorization: Bearer {{vendedor}}
+
+### Dados do contrato (tela contrato.html)
+GET {{host}}/api/vendas/1
+Authorization: Bearer {{vendedor}}
