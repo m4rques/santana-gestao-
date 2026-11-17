@@ -83,18 +83,20 @@ class PropostaService {
         return venda;
     }
 
-    // Dados da venda para a tela de contrato (o PDF é gerado pelo botão de impressão do front).
+    // Dados da venda para a tela de contrato e a geração do PDF.
     static Map<String, Object> buscarVenda(Connection c, long id) throws SQLException {
-        Map<String, Object> r = Banco.um(c, "SELECT v.id, v.data, v.valor, v.pagamento, cl.nome AS cnome, cl.cpf, cl.endereco, "
+        Map<String, Object> r = Banco.um(c, "SELECT v.id, v.proposta_id AS \"propostaId\", u.nome AS vendedor, "
+            + "v.data, v.valor, v.pagamento, cl.nome AS cnome, cl.cpf, cl.endereco, "
             + "ve.marca, ve.modelo, ve.ano, ve.chassi FROM vendas v JOIN clientes cl ON cl.id = v.cliente_id "
-            + "JOIN veiculos ve ON ve.id = v.veiculo_id WHERE v.id=?", id);
+            + "JOIN veiculos ve ON ve.id = v.veiculo_id JOIN propostas p ON p.id = v.proposta_id "
+            + "JOIN usuarios u ON u.id = p.vendedor_id WHERE v.id=?", id);
         if (r == null) throw ErroNegocio.naoEncontrado("Venda não encontrada.");
         Map<String, Object> cliente = new LinkedHashMap<>();
         cliente.put("nome", r.get("cnome")); cliente.put("cpf", r.get("cpf")); cliente.put("endereco", r.get("endereco"));
         Map<String, Object> veiculo = new LinkedHashMap<>();
         for (String k : List.of("marca", "modelo", "ano", "chassi")) veiculo.put(k, r.get(k));
         Map<String, Object> out = new LinkedHashMap<>();
-        for (String k : List.of("id", "data", "valor", "pagamento")) out.put(k, r.get(k));
+        for (String k : List.of("id", "data", "valor", "pagamento", "propostaId", "vendedor")) out.put(k, r.get(k));
         out.put("cliente", cliente); out.put("veiculo", veiculo);
         return out;
     }

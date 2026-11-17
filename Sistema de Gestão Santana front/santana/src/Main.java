@@ -1,13 +1,17 @@
 import com.sun.net.httpserver.*;
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.security.MessageDigest;
 import java.sql.*;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
+import br.com.oficina.Notificacoes;
 
 // Servidor: entrega a pasta web/ e a API em /api. Rode esta classe pelo botão Run do VS Code.
 public class Main {
@@ -15,8 +19,13 @@ public class Main {
 
     static final Map<String, Sessao> sessoes = new ConcurrentHashMap<>();
     static final long INATIVIDADE_MS = 30 * 60 * 1000; // sessão cai após 30 min sem uso
+    private static final Path TEMPLATE = Path.of(System.getenv().getOrDefault("OFICINA_TEMPLATE",
+        "src/main/resources/contrato-venda.txt"));
+    private static final BigDecimal ALIQUOTA = OficinaService.aliquota(System.getenv().getOrDefault("OFICINA_IMPOSTO", "0.05"));
 
     public static void main(String[] args) throws Exception {
+        Map<String, Notificacoes.Canal> canais = canais();
+        Duration intervalo = intervalo();
         try (Connection c = Banco.abrir()) {
             System.out.println("Banco de dados conectado.");
         } catch (SQLException e) {
@@ -24,9 +33,43 @@ public class Main {
         }
         HttpServer srv = HttpServer.create(new InetSocketAddress(8080), 0);
         srv.createContext("/", Main::tratar);
-        srv.setExecutor(Executors.newFixedThreadPool(8));
+        ExecutorService requisicoes = Executors.newFixedThreadPool(8);
+        srv.setExecutor(requisicoes);
+        ScheduledExecutorService notificacoes = canais.isEmpty() ? null : NotificacaoService.iniciar(canais, intervalo);
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            if (notificacoes != null) notificacoes.shutdownNow();
+            srv.stop(1);
+            requisicoes.shutdownNow();
+        }));
         srv.start();
         System.out.println("Servidor em http://localhost:8080");
+        System.out.println(canais.isEmpty() ? "Notificações serão enfileiradas até que um canal seja configurado."
+            : "Canais de notificação ativos: " + canais.keySet());
+    }
+
+    private static Map<String, Notificacoes.Canal> canais() {
+        Map<String, Notificacoes.Canal> canais = new LinkedHashMap<>();
+        boolean simular = Boolean.parseBoolean(System.getenv("OFICINA_NOTIFICACOES_CONSOLE"));
+        for (String canal : List.of("EMAIL", "SMS")) {
+            String prefixo = "OFICINA_" + canal;
+            String url = System.getenv(prefixo + "_URL");
+            if (url != null && !url.isBlank()) {
+                canais.put(canal, Notificacoes.http(URI.create(url), System.getenv(prefixo + "_TOKEN")));
+            } else if (simular) {
+                canais.put(canal, Notificacoes.console(canal));
+            }
+        }
+        return canais;
+    }
+
+    private static Duration intervalo() {
+        try {
+            long segundos = Long.parseLong(System.getenv().getOrDefault("OFICINA_INTERVALO_SEGUNDOS", "30"));
+            if (segundos > 0 && segundos <= 86400) return Duration.ofSeconds(segundos);
+        } catch (NumberFormatException e) {
+            // A mesma mensagem vale para formato inválido ou valor fora do intervalo.
+        }
+        throw new IllegalArgumentException("OFICINA_INTERVALO_SEGUNDOS deve ser um inteiro entre 1 e 86400.");
     }
 
     static void tratar(HttpExchange ex) throws IOException {
@@ -64,6 +107,7 @@ public class Main {
         Sessao s = autenticar(ex);
 
         try (Connection c = Banco.abrir()) {
+            c.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
             c.setAutoCommit(false); // cada requisição é uma transação: ou grava tudo ou nada
             try {
                 Resp r = despachar(c, m, seg, corpo, query(ex.getRequestURI().getRawQuery()), s);
@@ -76,7 +120,7 @@ public class Main {
         }
     }
 
-    static Resp despachar(Connection c, String m, String[] seg, Map<String, Object> b, Map<String, String> q, Sessao s) throws SQLException {
+    static Resp despachar(Connection c, String m, String[] seg, Map<String, Object> b, Map<String, String> q, Sessao s) throws SQLException, IOException {
         boolean get = m.equals("GET"), post = m.equals("POST"), put = m.equals("PUT");
         int n = seg.length;
 
@@ -128,6 +172,63 @@ public class Main {
             }
             case "vendas" -> {
                 if (n == 2 && get) return new Resp(200, PropostaService.buscarVenda(c, id(seg[1])));
+                if (n == 3 && get && seg[2].equals("contrato.pdf"))
+                    return new Resp(200, ContratoService.gerar(c, id(seg[1]), TEMPLATE));
+            }
+            case "oficina" -> {
+                if (n >= 2) return oficina(c, m, seg, b, s);
+            }
+            case "dashboard" -> {
+                if (n == 1 && get) return new Resp(200, DashboardService.relatorio(c, q));
+            }
+            default -> { }
+        }
+        throw ErroNegocio.naoEncontrado("Rota não encontrada.");
+    }
+
+    private static Resp oficina(Connection c, String m, String[] seg, Map<String, Object> b, Sessao s) throws SQLException {
+        boolean get = m.equals("GET"), post = m.equals("POST"), put = m.equals("PUT");
+        int n = seg.length;
+        switch (seg[1]) {
+            case "tecnicos" -> {
+                if (n == 2 && get) return new Resp(200, OficinaService.tecnicos(c));
+                if (n == 2 && post) {
+                    exigir(s, Sessao.ADMIN, Sessao.GERENTE);
+                    return new Resp(201, OficinaService.cadastrarTecnico(c, b));
+                }
+            }
+            case "pecas" -> {
+                if (n == 2 && get) return new Resp(200, OficinaService.pecas(c));
+                if (n == 2 && post) {
+                    exigir(s, Sessao.ADMIN, Sessao.GERENTE);
+                    return new Resp(201, OficinaService.cadastrarPeca(c, b));
+                }
+                if (n == 4 && post && seg[3].equals("reposicao")) {
+                    exigir(s, Sessao.ADMIN, Sessao.GERENTE);
+                    return new Resp(200, OficinaService.reporPeca(c, id(seg[2]), b));
+                }
+            }
+            case "agendamentos" -> {
+                if (n == 2 && get) return new Resp(200, OficinaService.agenda(c));
+                if (n == 2 && post) return new Resp(201, OficinaService.agendar(c, b));
+                if (n == 4 && put && seg[3].equals("cancelamento"))
+                    return new Resp(200, OficinaService.cancelar(c, id(seg[2])));
+                if (n == 4 && post && seg[3].equals("os"))
+                    return new Resp(201, OficinaService.abrirOs(c, id(seg[2])));
+            }
+            case "os" -> {
+                if (n == 2 && get) return new Resp(200, OficinaService.ordens(c));
+                if (n == 3 && get) return new Resp(200, OficinaService.consultarOs(c, id(seg[2])));
+                if (n == 4 && put && seg[3].equals("inicio"))
+                    return new Resp(200, OficinaService.iniciarOs(c, id(seg[2])));
+                if (n == 4 && post && seg[3].equals("itens"))
+                    return new Resp(201, OficinaService.apontar(c, id(seg[2]), b));
+                if (n == 4 && put && seg[3].equals("conclusao"))
+                    return new Resp(200, OficinaService.concluirOs(c, id(seg[2])));
+                if (n == 4 && post && seg[3].equals("fatura")) {
+                    exigir(s, Sessao.ADMIN, Sessao.GERENTE);
+                    return new Resp(200, OficinaService.faturar(c, id(seg[2]), ALIQUOTA));
+                }
             }
             default -> { }
         }
@@ -189,8 +290,16 @@ public class Main {
     }
 
     static void enviar(HttpExchange ex, int status, Object corpo) throws IOException {
-        byte[] dados = Json.escrever(corpo).getBytes(StandardCharsets.UTF_8);
-        ex.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+        byte[] dados;
+        if (corpo instanceof byte[] pdf) {
+            dados = pdf;
+            ex.getResponseHeaders().set("Content-Type", "application/pdf");
+            ex.getResponseHeaders().set("Content-Disposition", "attachment; filename=\"contrato.pdf\"");
+            ex.getResponseHeaders().set("Cache-Control", "no-store");
+        } else {
+            dados = Json.escrever(corpo).getBytes(StandardCharsets.UTF_8);
+            ex.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+        }
         ex.sendResponseHeaders(status, dados.length);
         ex.getResponseBody().write(dados);
     }

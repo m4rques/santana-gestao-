@@ -35,13 +35,14 @@ function shell(page) { // protege a página, monta o menu e encerra sessão apó
 }
 
 
-async function api(path, method = 'GET', body) {
+async function api(path, method = 'GET', body, tipo = 'json') {
   if (CONFIG.USE_MOCK) return mock(path, method, body);
   const r = await fetch(CONFIG.API + path, {
     method,
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (sessionStorage.token || '') },
     body: body ? JSON.stringify(body) : undefined
   });
+  if (r.ok && tipo === 'pdf') return r.blob();
   const d = await r.json().catch(() => ({}));
   if (r.status === 401 && !path.startsWith('/login')) logout();
   if (!r.ok) throw new Error(d.erro || 'Erro ' + r.status);

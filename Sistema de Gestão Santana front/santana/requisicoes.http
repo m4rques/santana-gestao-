@@ -145,3 +145,124 @@ Authorization: Bearer {{vendedor}}
 ### Dados do contrato (tela contrato.html)
 GET {{host}}/api/vendas/1
 Authorization: Bearer {{vendedor}}
+
+### RF07–RF13. Atualize os IDs abaixo com os valores retornados pelos POSTs.
+@vendaId = 1
+@clienteOficinaId = 3
+@tecnicoId = 1
+@pecaId = 1
+@agendamentoId = 1
+@osId = 1
+@chassiOficina = CH000001
+@inicioOficina = 2030-06-12T10:00:00-03:00
+@fimOficina = 2030-06-12T11:00:00-03:00
+
+### RF07 - baixar o contrato da venda efetivada (200, application/pdf).
+GET {{host}}/api/vendas/{{vendaId}}/contrato.pdf
+Authorization: Bearer {{vendedor}}
+
+### Cliente de teste para oficina e notificações.
+POST {{host}}/api/clientes
+Authorization: Bearer {{vendedor}}
+Content-Type: application/json
+
+{
+  "nome": "Cliente Oficina Exemplo",
+  "cpf": "11.222.333/0001-81",
+  "email": "cliente-oficina@example.com",
+  "telefone": "+12025550100",
+  "consentimento": true
+}
+
+### RF08 - cadastrar técnico.
+POST {{host}}/api/oficina/tecnicos
+Authorization: Bearer {{gerente}}
+Content-Type: application/json
+
+{"nome": "Técnico Exemplo"}
+
+### RF08 - reservar horário para veículo e técnico. Ajuste o período para o futuro.
+### RF12 - a operação enfileira a confirmação e o lembrete quando faltam mais de 24h.
+### Para ver a confirmação no terminal, inicie o servidor com OFICINA_NOTIFICACOES_CONSOLE=true e use a conta fictícia acima.
+POST {{host}}/api/oficina/agendamentos
+Authorization: Bearer {{vendedor}}
+Content-Type: application/json
+
+{
+  "clienteId": {{clienteOficinaId}},
+  "chassi": "{{chassiOficina}}",
+  "tecnicoId": {{tecnicoId}},
+  "inicio": "{{inicioOficina}}",
+  "fim": "{{fimOficina}}"
+}
+
+### RF08 - repetir a mesma reserva retorna 409 por sobreposição.
+POST {{host}}/api/oficina/agendamentos
+Authorization: Bearer {{vendedor}}
+Content-Type: application/json
+
+{
+  "clienteId": {{clienteOficinaId}},
+  "chassi": "{{chassiOficina}}",
+  "tecnicoId": {{tecnicoId}},
+  "inicio": "{{inicioOficina}}",
+  "fim": "{{fimOficina}}"
+}
+
+### RF09 - converter agendamento em OS.
+POST {{host}}/api/oficina/agendamentos/{{agendamentoId}}/os
+Authorization: Bearer {{vendedor}}
+
+### RF09 - iniciar execução.
+PUT {{host}}/api/oficina/os/{{osId}}/inicio
+Authorization: Bearer {{vendedor}}
+
+### RF10 - cadastrar peça com cinco unidades em estoque.
+POST {{host}}/api/oficina/pecas
+Authorization: Bearer {{gerente}}
+Content-Type: application/json
+
+{"codigo": "FILTRO-DEMO", "descricao": "Filtro de óleo", "valorUnitario": 35.90, "saldo": 5}
+
+### RF10 - lançar duas unidades da peça na OS, restam três em estoque.
+POST {{host}}/api/oficina/os/{{osId}}/itens
+Authorization: Bearer {{vendedor}}
+Content-Type: application/json
+
+{"tipo": "PECA", "pecaId": {{pecaId}}, "quantidade": 2}
+
+### RF10 - lançar serviço. Subtotal esperado de R$ 171,80.
+POST {{host}}/api/oficina/os/{{osId}}/itens
+Authorization: Bearer {{vendedor}}
+Content-Type: application/json
+
+{"tipo": "SERVICO", "descricao": "Troca de óleo e filtro", "valorUnitario": 100.00, "quantidade": 1}
+
+### RF10 - conferir o saldo da peça.
+GET {{host}}/api/oficina/pecas
+Authorization: Bearer {{gerente}}
+
+### RF11 - concluir OS.
+PUT {{host}}/api/oficina/os/{{osId}}/conclusao
+Authorization: Bearer {{vendedor}}
+
+### RF11 - emitir fatura. Com alíquota de 5%, imposto de R$ 8,59 e total de R$ 180,39.
+### RF12 - a emissão enfileira a notificação da fatura.
+POST {{host}}/api/oficina/os/{{osId}}/fatura
+Authorization: Bearer {{gerente}}
+
+### RF11 - uma nova chamada retorna a mesma fatura.
+POST {{host}}/api/oficina/os/{{osId}}/fatura
+Authorization: Bearer {{gerente}}
+
+### RF13 - consultar relatório do mês corrente.
+GET {{host}}/api/dashboard
+Authorization: Bearer {{gerente}}
+
+### RF13 - consultar os últimos 12 meses incluindo o atual.
+GET {{host}}/api/dashboard?meses=12
+Authorization: Bearer {{gerente}}
+
+### RF13 - consultar um intervalo explícito. A data final é exclusiva.
+GET {{host}}/api/dashboard?inicio=2026-01-01&fim=2031-01-01
+Authorization: Bearer {{gerente}}

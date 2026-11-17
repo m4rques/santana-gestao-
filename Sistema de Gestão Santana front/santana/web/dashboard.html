@@ -25,7 +25,10 @@
   </div>
   <section class="card tw" style="margin-top:1rem">
     <table><caption>Resumo mensal</caption>
-      <thead><tr><th scope="col">Mês</th><th scope="col">Vendas</th><th scope="col">Receita</th></tr></thead>
+      <thead><tr><th scope="col">Mês</th><th scope="col">Vendas</th><th scope="col">Receita de vendas</th>
+        <th scope="col">Test-drives</th><th scope="col">Agend. oficina</th><th scope="col">OS abertas</th>
+        <th scope="col">OS concluídas</th><th scope="col">Faturas</th><th scope="col">Impostos da oficina</th>
+        <th scope="col">Receita da oficina</th></tr></thead>
       <tbody id="tb"></tbody></table>
   </section>
 </main>
@@ -33,27 +36,49 @@
 <script>
 shell('dashboard.html');
 let dados = null;
+let consulta = 0;
+const colunas = [
+  ['Vendas', 'vendas'], ['Receita de vendas', 'receita', brl], ['Test-drives', 'testDrives'],
+  ['Agendamentos da oficina', 'agendamentosOficina'], ['OS abertas', 'osAbertas'], ['OS concluídas', 'osConcluidas'],
+  ['Faturas', 'faturas'], ['Impostos da oficina', 'impostosOficina', brl], ['Receita da oficina', 'receitaOficina', brl]
+];
 const barras = (el, itens, fmt) => { 
   const max = Math.max(...itens.map(i => i.v), 1);
   el.innerHTML = itens.map(i => `<li><span>${esc(i.l)}</span><div class="t" aria-hidden="true"><div class="f" style="width:${i.v / max * 100}%"></div></div><b>${fmt(i.v)}</b></li>`).join('');
 };
 async function carregar() {
+  const atual = ++consulta;
+  $('#csv').disabled = true;
   try {
-    dados = await api('/dashboard?meses=' + $('#meses').value);
+    const resultado = await api('/dashboard?meses=' + $('#meses').value);
+    if (atual !== consulta) return;
+    dados = resultado;
     const tv = dados.meses.reduce((a, m) => a + m.vendas, 0), tr = dados.meses.reduce((a, m) => a + m.receita, 0);
-    $('#kpi').innerHTML = [['Receita no período', brl(tr)], ['Veículos vendidos', tv], ['Ticket médio', brl(tv ? tr / tv : 0)]]
+    const totais = dados.totais;
+    const indicadores = [['Receita de vendas', brl(tr)], ['Veículos vendidos', tv], ['Ticket médio de vendas', brl(tv ? tr / tv : 0)]];
+    if (totais) {
+      indicadores.push(['Receita da oficina', brl(totais.receitaOficina)], ['OS concluídas', totais.osConcluidas],
+        ['Test-drives concluídos', totais.testDrivesConcluidos]);
+    }
+    $('#kpi').innerHTML = indicadores
       .map(([t, v]) => `<div class="card">${t}<b>${v}</b></div>`).join('');
     barras($('#g1'), dados.meses.map(m => ({ l: m.mes, v: m.vendas })), v => v);
     barras($('#g2'), dados.maisVendidos.map(m => ({ l: m.modelo, v: m.qtd })), v => v);
-    $('#tb').innerHTML = dados.meses.map(m => `<tr><th scope="row">${esc(m.mes)}</th><td>${m.vendas}</td><td>${brl(m.receita)}</td></tr>`).join('');
+    $('#tb').innerHTML = dados.meses.map(m => '<tr><th scope="row">' + esc(m.mes) + '</th>' +
+      colunas.map(([, chave, formatar = String]) => '<td>' + esc(formatar(m[chave] ?? 0)) + '</td>').join('') + '</tr>').join('');
     $('#m').className = 'msg';
-  } catch (err) { msg($('#m'), err.message); }
+    $('#m').textContent = '';
+    $('#csv').disabled = false;
+  } catch (err) {
+    if (atual === consulta) msg($('#m'), err.message);
+  }
 }
 $('#meses').onchange = carregar;
 $('#pdf').onclick = () => print();
 $('#csv').onclick = () => {
   if (!dados) return;
-  const l = ['Mês;Vendas;Receita', ...dados.meses.map(m => `${m.mes};${m.vendas};${m.receita}`)].join('\n');
+  const cabecalho = ['Mês', ...colunas.map(([rotulo]) => rotulo)].join(';');
+  const l = [cabecalho, ...dados.meses.map(m => [m.mes, ...colunas.map(([, chave]) => m[chave] ?? 0)].join(';'))].join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['\ufeff' + l], { type: 'text/csv;charset=utf-8' }));
   a.download = 'relatorio-santana.csv'; a.click(); URL.revokeObjectURL(a.href);

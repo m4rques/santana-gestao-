@@ -14,7 +14,7 @@
   <form id="f" class="card row noprint">
     <div><label for="id">Número da venda</label><input id="id" type="number" min="1" value="1" required></div>
     <button type="submit">Gerar contrato</button>
-    <button type="button" class="sec" id="imp" hidden>Imprimir / Salvar PDF</button>
+    <button type="button" class="sec" id="imp" hidden>Baixar PDF</button>
   </form>
   <div id="m" class="msg noprint" role="alert"></div>
   <article id="doc" class="contract" hidden></article>
@@ -27,6 +27,7 @@ async function carregar(id) {
   $('#m').className = 'msg'; $('#m').textContent = '';
   try {
     const v = await api('/vendas/' + id);
+    $('#imp').dataset.venda = v.id;
     $('#doc').innerHTML = `<h2>Contrato de compra e venda de veículo nº ${esc(v.id)}</h2>
       <p><strong>Vendedora:</strong> Sant'Ana Concessionária.</p>
       <p><strong>Comprador(a):</strong> ${esc(v.cliente.nome)}, CPF/CNPJ ${esc(v.cliente.cpf)}, residente em ${esc(v.cliente.endereco)}.</p>
@@ -38,7 +39,26 @@ async function carregar(id) {
   } catch (err) { $('#doc').hidden = true; $('#imp').hidden = true; msg($('#m'), err.message); }
 }
 $('#f').onsubmit = e => { e.preventDefault(); carregar($('#id').value); };
-$('#imp').onclick = () => print();
+if (CONFIG.USE_MOCK) $('#imp').textContent = 'Imprimir';
+$('#imp').onclick = async () => {
+  if (CONFIG.USE_MOCK) return print();
+  const botao = $('#imp');
+  const id = botao.dataset.venda;
+  botao.disabled = true;
+  try {
+    const pdf = await api('/vendas/' + id + '/contrato.pdf', 'GET', undefined, 'pdf');
+    const url = URL.createObjectURL(pdf);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'contrato-' + id + '.pdf';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (err) {
+    msg($('#m'), err.message);
+  } finally {
+    botao.disabled = false;
+  }
+};
 const p = new URLSearchParams(location.search).get('id');
 if (p) { $('#id').value = p; carregar(p); }
 </script>
