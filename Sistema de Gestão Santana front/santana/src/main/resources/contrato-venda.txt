@@ -1,0 +1,27 @@
+CONTRATO DE COMPRA E VENDA DE VEÍCULO Nº {{vendaId}}
+
+Vendedora: Sant'Ana Concessionária
+Responsável pela venda: {{vendedor}}
+Proposta: {{propostaId}}
+
+Comprador(a): {{comprador}}
+CPF/CNPJ: {{documento}}
+Endereço: {{endereco}}
+
+Veículo: {{veiculo}}, ano {{ano}}
+Chassi: {{chassi}}
+
+Valor da venda: {{valor}}
+Condição de pagamento: {{pagamento}}
+Data da venda: {{data}}
+
+As partes concordam com a venda do veículo acima descrito nas condições
+indicadas.
+
+
+___________________________________
+Sant'Ana Concessionária
+
+
+___________________________________
+{{comprador}}
