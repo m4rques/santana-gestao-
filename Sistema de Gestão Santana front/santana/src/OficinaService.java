@@ -65,7 +65,6 @@ final class OficinaService {
         return Banco.lista(c, AGENDA + " ORDER BY a.inicio DESC, a.id DESC");
     }
 
-    // RF08: intervalos [início, fim); o bloqueio dos dois recursos serializa reservas concorrentes.
     static Map<String, Object> agendar(Connection c, Map<String, Object> b) throws SQLException {
         String chassi = texto(b, "chassi", 30);
         long cliente = identificador(b, "clienteId"), tecnico = identificador(b, "tecnicoId");
@@ -111,7 +110,6 @@ final class OficinaService {
         return Banco.um(c, AGENDA + " WHERE a.id=?", id);
     }
 
-    // RF09: o bloqueio e a chave única garantem uma OS por agendamento.
     static Map<String, Object> abrirOs(Connection c, long agendamento) throws SQLException {
         exigirEstado(travarAgenda(c, agendamento), "AGENDADO", "Só agendamentos ativos podem virar OS.");
         long id = Banco.longo(Banco.um(c, "INSERT INTO oficina_os (agendamento_id) VALUES (?) RETURNING id", agendamento).get("id"));
@@ -140,7 +138,6 @@ final class OficinaService {
         return consultarOs(c, id);
     }
 
-    // RF10: a baixa de estoque e o subtotal são gravados na mesma transação do item.
     static Map<String, Object> apontar(Connection c, long id, Map<String, Object> b) throws SQLException {
         exigirEstado(travarOs(c, id), "EM_EXECUCAO", "Só uma OS em execução pode receber itens.");
         String tipo = texto(b, "tipo", 7);
@@ -181,7 +178,6 @@ final class OficinaService {
         return consultarOs(c, id);
     }
 
-    // RF11: o faturamento preserva a alíquota e os valores da emissão.
     static Map<String, Object> faturar(Connection c, long id, BigDecimal aliquota) throws SQLException {
         Map<String, Object> os = travarOs(c, id);
         if ("FATURADA".equals(os.get("estado"))) {
@@ -258,7 +254,6 @@ final class OficinaService {
                 long valor = numero.longValueExact();
                 if (valor >= minimo) return valor;
             } catch (ArithmeticException e) {
-                // Valores fracionários e fora do intervalo recebem a mesma resposta de validação.
             }
         }
         throw ErroNegocio.invalido("Informe " + campo + " como um inteiro maior ou igual a " + minimo + ".");
@@ -278,7 +273,6 @@ final class OficinaService {
             try {
                 return OffsetDateTime.parse(texto).truncatedTo(ChronoUnit.MICROS);
             } catch (DateTimeParseException e) {
-                // Um offset explícito evita ambiguidades entre o navegador e o servidor.
             }
         }
         throw ErroNegocio.invalido("Informe " + campo + " como data e hora ISO 8601 com offset.");

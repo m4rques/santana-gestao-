@@ -67,7 +67,6 @@ public class Main {
             long segundos = Long.parseLong(System.getenv().getOrDefault("OFICINA_INTERVALO_SEGUNDOS", "30"));
             if (segundos > 0 && segundos <= 86400) return Duration.ofSeconds(segundos);
         } catch (NumberFormatException e) {
-            // A mesma mensagem vale para formato inválido ou valor fora do intervalo.
         }
         throw new IllegalArgumentException("OFICINA_INTERVALO_SEGUNDOS deve ser um inteiro entre 1 e 86400.");
     }

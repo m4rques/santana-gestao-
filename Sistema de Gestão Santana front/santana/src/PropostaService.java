@@ -83,7 +83,6 @@ class PropostaService {
         return venda;
     }
 
-    // Dados da venda para a tela de contrato e a geração do PDF.
     static Map<String, Object> buscarVenda(Connection c, long id) throws SQLException {
         Map<String, Object> r = Banco.um(c, "SELECT v.id, v.proposta_id AS \"propostaId\", u.nome AS vendedor, "
             + "v.data, v.valor, v.pagamento, cl.nome AS cnome, cl.cpf, cl.endereco, "

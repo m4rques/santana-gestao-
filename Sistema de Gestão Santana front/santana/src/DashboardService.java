@@ -11,7 +11,6 @@ final class DashboardService {
     private static final ZoneId FUSO = ZoneId.of("America/Sao_Paulo");
     private static final int MAX_MESES = 120;
 
-    // RF13: uma instrução SQL mantém todos os indicadores na mesma visão do banco.
     private static final String RELATORIO = """
         WITH limites AS (
             SELECT CAST(? AS date) AS inicio, CAST(? AS date) AS fim, CAST(? AS text) AS fuso
@@ -140,7 +139,6 @@ final class DashboardService {
             LocalDate data = LocalDate.parse(valor);
             if (valor.length() == 10 && data.getYear() >= 1) return data;
         } catch (DateTimeParseException e) {
-            // A mesma mensagem cobre datas inválidas e anos fora do formato aceito.
         }
         throw ErroNegocio.invalido("Informe as datas no formato AAAA-MM-DD.");
     }

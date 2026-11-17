@@ -129,7 +129,6 @@ public final class ContratoPdf {
             objetos.add("<< /Length " + conteudo.length() + " >>\nstream\n" + conteudo + "endstream");
         }
 
-        // Os comandos e os objetos usam apenas ASCII, então os índices de caracteres são offsets em bytes.
         StringBuilder pdf = new StringBuilder("%PDF-1.4\n");
         StringBuilder referenciasCruzadas = new StringBuilder("0000000000 65535 f \n");
         for (int indice = 0; indice < objetos.size(); indice++) {

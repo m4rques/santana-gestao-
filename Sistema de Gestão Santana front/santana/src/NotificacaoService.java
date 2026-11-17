@@ -67,7 +67,6 @@ final class NotificacaoService {
     }
 
     private static Map<String, Object> reservar(Connection c, String canal, UUID reserva) throws SQLException {
-        // O UPDATE em autocommit torna a reserva visível antes de chamar a rede.
         return Banco.um(c, """
             WITH selecionada AS (
                 SELECT id FROM oficina_notificacoes
@@ -89,7 +88,7 @@ final class NotificacaoService {
             canal.enviar((String) n.get("destino"), (String) n.get("assunto"), (String) n.get("mensagem"), id.toString());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return; // A reserva expira mesmo se o servidor for desligado durante o envio.
+            return;
         } catch (Exception e) {
             String estado = Banco.longo(n.get("tentativas")) == MAX_TENTATIVAS ? "FALHOU" : "PENDENTE";
             Banco.executar(c, """
