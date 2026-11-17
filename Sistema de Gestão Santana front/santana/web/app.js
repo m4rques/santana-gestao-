@@ -25,7 +25,7 @@ function logout() { sessionStorage.clear(); location.href = 'index.html'; }
 
 function shell(page) { // protege a página, monta o menu e encerra sessão após 30 min inativa (RNF03)
   if (!sessionStorage.token) { location.href = 'index.html'; return; }
-  const links = [['veiculos.html', 'Veículos'], ['cadastro.html', 'Cadastros'], ['contrato.html', 'Contrato'], ['dashboard.html', 'Relatórios']];
+  const links = [['veiculos.html', 'Veículos'], ['vendas.html', 'Vendas'], ['testdrive.html', 'Test-drive'], ['oficina.html', 'Oficina'], ['cadastro.html', 'Cadastros'], ['contrato.html', 'Contrato'], ['dashboard.html', 'Relatórios']];
   $('#top').innerHTML = `<strong>Sant'Ana</strong><nav aria-label="Principal">${links.map(([h, t]) =>
     `<a href="${h}"${h === page ? ' aria-current="page"' : ''}>${t}</a>`).join('')}</nav>
     <span>${esc(sessionStorage.nome)}</span><button class="sec" id="sair" type="button">Sair</button>`;
@@ -105,4 +105,24 @@ async function mock(path, method, body) {
     return { meses, maisVendidos: [{ modelo: 'Corolla', qtd: 14 }, { modelo: 'Onix', qtd: 11 }, { modelo: 'Compass', qtd: 9 }, { modelo: 'Argo', qtd: 7 }, { modelo: 'Hilux', qtd: 5 }] };
   }
   throw new Error('Rota não encontrada: ' + p);
+}
+
+/* ---- auxiliares das telas de test-drive e oficina ---- */
+function opcoes(sel, vazio, itens, val, rot) {
+  $(sel).innerHTML = '<option value="">' + vazio + '</option>' + itens.map(i => '<option value="' + esc(val(i)) + '">' + esc(rot(i)) + '</option>').join('');
+}
+const dh = s => s ? new Date(s).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
+const btn = (u, rot, m = 'PUT', corpo = '', pergunta = '', cls = '') =>
+  '<button type="button" class="' + cls + '" data-m="' + m + '" data-u="' + u + '"' + (corpo ? " data-b='" + corpo + "'" : '') +
+  (pergunta ? ' data-p="' + pergunta + '"' : '') + '>' + rot + '</button> ';
+function ligar(tb, depois, ok = 'Feito.') { // um clique em botão com data-u chama a API e recarrega a tela
+  tb.onclick = async e => {
+    const b = e.target.closest('button[data-u]');
+    if (!b) return;
+    let corpo = b.dataset.b ? JSON.parse(b.dataset.b) : undefined;
+    if (b.dataset.p) { const t = prompt(b.dataset.p); if (!t) return; corpo = { ...corpo, feedback: t }; }
+    b.disabled = true;
+    try { await api(b.dataset.u, b.dataset.m, corpo); msg($('#m'), ok, 'ok'); await depois(); }
+    catch (err) { msg($('#m'), err.message); b.disabled = false; }
+  };
 }

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Test-drive - Sant'Ana</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<a class="skip" href="#main">Ir para o conteúdo</a>
+<header class="top" id="top"></header>
+<main id="main">
+  <h1>Test-drive</h1>
+  <div id="m" class="msg" role="alert"></div>
+  <section class="card" aria-labelledby="hn">
+    <h2 id="hn">Agendar test-drive</h2>
+    <form id="f" novalidate>
+      <div class="row">
+        <div><label for="cliente">Cliente (com CNH anexada)</label><select id="cliente"></select></div>
+        <div><label for="veiculo">Veículo disponível</label><select id="veiculo"></select></div>
+        <div><label for="quando">Data e hora</label><input id="quando" type="datetime-local"></div>
+      </div>
+      <p>Cada test-drive dura 60 minutos e pode começar entre 08:00 e 17:00.</p>
+      <button type="submit" id="salvar">Agendar</button>
+    </form>
+  </section>
+  <section class="card tw" style="margin-top:1rem" aria-labelledby="hl">
+    <h2 id="hl">Agenda</h2>
+    <p id="vazio" hidden>Nenhum test-drive agendado.</p>
+    <table><caption class="noprint">Test-drives por data</caption>
+      <thead><tr><th scope="col">Nº</th><th scope="col">Cliente</th><th scope="col">Veículo</th><th scope="col">Horário</th>
+        <th scope="col">Situação</th><th scope="col">Feedback</th><th scope="col">Ação</th></tr></thead>
+      <tbody id="tb"></tbody></table>
+  </section>
+</main>
+<script src="app.js"></script>
+<script>
+shell('testdrive.html');
+const pode = ['Vendedor', 'Gerente de Vendas', 'Administrador'].includes(sessionStorage.perfil);
+const cor = { 'Agendado': 'Aguardando', 'Em andamento': 'Aprovada', 'Concluído': 'Vendida', 'Cancelado': 'Recusada' };
+async function carregar() {
+  try {
+    const [cl, ve, td] = await Promise.all([api('/clientes'), api('/veiculos?' + new URLSearchParams({ status: 'Disponível' })), api('/testdrives')]);
+    opcoes('#cliente', 'Selecione o cliente', cl, c => c.codigo, c => c.codigo + ' · ' + c.nome + (c.cnhStatus === 'Válida' ? '' : ' (sem CNH)'));
+    opcoes('#veiculo', 'Selecione o veículo', ve, v => v.id, v => v.marca + ' ' + v.modelo + ' ' + v.ano);
+    $('#vazio').hidden = td.length > 0;
+    $('#tb').innerHTML = td.map(t => '<tr><th scope="row">' + t.id + '</th><td>' + esc(t.cliente) + '</td><td>' + esc(t.veiculo) + '</td><td>' + dh(t.dataHora) +
+      '</td><td><span class="badge s-' + cor[t.status] + '">' + esc(t.status) + '</span></td><td>' + esc(t.feedback || '—') + '</td><td>' +
+      (!pode ? '—' : t.status === 'Agendado' ? btn('/testdrives/' + t.id + '/status', 'Entregar chave', 'PUT', '{"status":"Em andamento"}') + btn('/testdrives/' + t.id + '/status', 'Cancelar', 'PUT', '{"status":"Cancelado"}', '', 'sec')
+        : t.status === 'Em andamento' ? btn('/testdrives/' + t.id + '/status', 'Concluir', 'PUT', '{"status":"Concluído"}', 'Feedback do cliente:') : '—') + '</td></tr>').join('');
+  } catch (err) { msg($('#m'), err.message); }
+}
+ligar($('#tb'), carregar, 'Test-drive atualizado.');
+$('#f').onsubmit = async e => {
+  e.preventDefault();
+  if (!$('#cliente').value || !$('#veiculo').value || !$('#quando').value) return msg($('#m'), 'Escolha cliente, veículo e horário.');
+  $('#salvar').disabled = true;
+  try {
+    await api('/testdrives', 'POST', { clienteCodigo: $('#cliente').value, veiculoId: Number($('#veiculo').value), dataHora: $('#quando').value });
+    msg($('#m'), 'Test-drive agendado.', 'ok'); e.target.reset(); await carregar();
+  } catch (err) { msg($('#m'), err.message); } finally { $('#salvar').disabled = false; }
+};
+if (CONFIG.USE_MOCK) msg($('#m'), 'Esta tela precisa do back-end. Defina USE_MOCK como false em app.js.');
+else carregar();
+</script>
+</body></html>

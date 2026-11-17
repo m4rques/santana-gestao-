@@ -11,8 +11,8 @@ class PropostaService {
     static List<Map<String, Object>> listar(Connection c) throws SQLException {
         return Banco.lista(c, "SELECT p.id, cl.nome AS cliente, ve.marca || ' ' || ve.modelo AS veiculo, "
             + "p.valor_tabela AS \"valorTabela\", p.desconto_pct AS \"descontoPct\", p.valor_final AS \"valorFinal\", "
-            + "p.pagamento, p.status FROM propostas p JOIN clientes cl ON cl.id = p.cliente_id "
-            + "JOIN veiculos ve ON ve.id = p.veiculo_id ORDER BY p.id DESC");
+            + "p.pagamento, p.status, v.id AS \"vendaId\" FROM propostas p JOIN clientes cl ON cl.id = p.cliente_id "
+            + "JOIN veiculos ve ON ve.id = p.veiculo_id LEFT JOIN vendas v ON v.proposta_id = p.id ORDER BY p.id DESC");
     }
 
     static Map<String, Object> criar(Connection c, Map<String, Object> b, Sessao s) throws SQLException {

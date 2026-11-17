@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vendas - Sant'Ana</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Ir para o conteúdo</a>
+<header class="top" id="top"></header>
+<main id="main">
+  <h1>Vendas</h1>
+  <div id="m" class="msg" role="alert"></div>
+
+  <section class="card" aria-labelledby="hn" id="nova">
+    <h2 id="hn">Nova proposta</h2>
+    <form id="f" novalidate>
+      <div class="row">
+        <div style="flex:1 1 220px"><label for="cliente">Cliente</label>
+          <select id="cliente" required></select></div>
+        <div style="flex:2 1 280px"><label for="veiculo">Veículo disponível</label>
+          <select id="veiculo" required></select></div>
+        <div><label for="desc">Desconto (%)</label>
+          <input id="desc" type="number" min="0" max="10" step="0.5" value="0"></div>
+        <div><label for="pag">Pagamento</label>
+          <select id="pag"><option>À vista</option><option>Financiamento 24x</option><option>Financiamento 36x</option>
+            <option>Financiamento 48x</option><option>Financiamento 60x</option></select></div>
+      </div>
+      <p id="prev" class="prev" role="status" aria-live="polite">Escolha um veículo para ver o valor final.</p>
+      <button type="submit" id="salvar">Registrar proposta</button>
+    </form>
+  </section>
+
+  <section class="card tw" style="margin-top:1rem" aria-labelledby="hp">
+    <h2 id="hp">Propostas</h2>
+    <p id="vazio" hidden>Nenhuma proposta registrada ainda.</p>
+    <table>
+      <caption class="noprint">Propostas registradas, da mais recente para a mais antiga</caption>
+      <thead><tr><th scope="col">Nº</th><th scope="col">Cliente</th><th scope="col">Veículo</th><th scope="col">Tabela</th>
+        <th scope="col">Desconto</th><th scope="col">Valor final</th><th scope="col">Pagamento</th>
+        <th scope="col">Situação</th><th scope="col">Ação</th></tr></thead>
+      <tbody id="tb"></tbody>
+    </table>
+  </section>
+</main>
+<script src="app.js"></script>
+<script>
+shell('vendas.html');
+const perfil = sessionStorage.perfil;
+const GERENCIA = ['Gerente de Vendas', 'Administrador'];
+const PODE_VENDER = ['Vendedor', 'Gerente de Vendas', 'Administrador'];
+// Espelham as regras do servidor (PropostaService). O servidor é quem decide de verdade.
+const MAXIMO = 10, ALCADA = perfil === 'Vendedor' ? 3 : 10;
+let veiculos = [];
+
+function previa() {
+  const v = veiculos.find(x => String(x.id) === $('#veiculo').value);
+  const d = parseFloat($('#desc').value) || 0;
+  const el = $('#prev');
+  if (!v) { el.textContent = 'Escolha um veículo para ver o valor final.'; return; }
+  if (d < 0 || d > MAXIMO) { el.textContent = 'O desconto deve estar entre 0% e ' + MAXIMO + '%.'; return; }
+  const final = Math.round(v.preco * (100 - d)) / 100;
+  const regra = d > ALCADA
+    ? 'Acima da sua alçada (' + ALCADA + '%): a proposta ficará aguardando a aprovação do gerente.'
+    : 'Dentro da sua alçada: a proposta será aprovada automaticamente.';
+  el.textContent = 'Tabela ' + brl(v.preco) + ' com ' + d.toLocaleString('pt-BR') + '% de desconto: valor final ' + brl(final) + '. ' + regra;
+}
+
+async function carregarOpcoes() {
+  const [clientes, lista] = await Promise.all([api('/clientes'), api('/veiculos?' + new URLSearchParams({ status: 'Disponível' }))]);
+  veiculos = lista;
+  $('#cliente').innerHTML = '<option value="">Selecione o cliente</option>' + clientes.map(c =>
+    '<option value="' + esc(c.codigo) + '">' + esc(c.codigo) + ' · ' + esc(c.nome) + '</option>').join('');
+  $('#veiculo').innerHTML = '<option value="">' + (lista.length ? 'Selecione o veículo' : 'Nenhum veículo disponível') + '</option>' +
+    lista.map(v => '<option value="' + v.id + '">' + esc(v.marca) + ' ' + esc(v.modelo) + ' ' + esc(v.ano) + ' · ' + brl(v.preco) + '</option>').join('');
+  previa();
+}
+
+function acoes(p) {
+  if (p.status === 'Aguardando aprovação') {
+    return GERENCIA.includes(perfil)
+      ? '<button type="button" data-a="aprovar" data-id="' + p.id + '" aria-label="Aprovar proposta ' + p.id + '">Aprovar</button>' +
+        '<button type="button" class="sec" data-a="recusar" data-id="' + p.id + '" aria-label="Recusar proposta ' + p.id + '">Recusar</button>'
+      : 'Aguardando o gerente';
+  }
+  if (p.status === 'Aprovada') {
+    return PODE_VENDER.includes(perfil)
+      ? '<button type="button" data-a="vender" data-id="' + p.id + '" aria-label="Fechar venda da proposta ' + p.id + '">Fechar venda</button>'
+      : '—';
+  }
+  if (p.status === 'Vendida' && p.vendaId) return '<a href="contrato.html?id=' + p.vendaId + '">Ver contrato</a>';
+  return '—';
+}
+
+async function listarPropostas() {
+  const r = await api('/propostas');
+  $('#vazio').hidden = r.length > 0;
+  $('#tb').innerHTML = r.map(p => '<tr><th scope="row">' + p.id + '</th><td>' + esc(p.cliente) + '</td><td>' + esc(p.veiculo) + '</td>' +
+    '<td>' + brl(p.valorTabela) + '</td><td>' + Number(p.descontoPct).toLocaleString('pt-BR') + '%</td><td>' + brl(p.valorFinal) + '</td>' +
+    '<td>' + esc(p.pagamento) + '</td><td><span class="badge s-' + esc(p.status.split(' ')[0]) + '">' + esc(p.status) + '</span></td>' +
+    '<td>' + acoes(p) + '</td></tr>').join('');
+}
+
+async function recarregar() {
+  try { await Promise.all([carregarOpcoes(), listarPropostas()]); }
+  catch (err) { msg($('#m'), err.message); }
+}
+
+$('#veiculo').onchange = previa;
+$('#desc').oninput = previa;
+
+$('#f').onsubmit = async e => {
+  e.preventDefault();
+  const d = parseFloat($('#desc').value || '0');
+  if (!$('#cliente').value || !$('#veiculo').value) return msg($('#m'), 'Selecione o cliente e o veículo.');
+  if (isNaN(d) || d < 0 || d > MAXIMO) return msg($('#m'), 'O desconto deve estar entre 0% e ' + MAXIMO + '%.');
+  $('#salvar').disabled = true;
+  try {
+    const r = await api('/propostas', 'POST', { clienteCodigo: $('#cliente').value, veiculoId: Number($('#veiculo').value), descontoPct: d, pagamento: $('#pag').value });
+    msg($('#m'), 'Proposta ' + r.id + ' registrada: ' + r.status + '. Valor final ' + brl(r.valorFinal) + '.', 'ok');
+    e.target.reset();
+    await recarregar();
+  } catch (err) { msg($('#m'), err.message); }
+  finally { $('#salvar').disabled = false; }
+};
+
+$('#tb').onclick = async e => {
+  const b = e.target.closest('button[data-a]');
+  if (!b) return;
+  const id = b.dataset.id, acao = b.dataset.a;
+  if (acao === 'vender' && !confirm('Confirmar a venda da proposta ' + id + '? O veículo passará para Vendido.')) return;
+  b.disabled = true;
+  try {
+    if (acao === 'vender') {
+      const v = await api('/propostas/' + id + '/venda', 'POST');
+      msg($('#m'), 'Venda ' + v.id + ' registrada. O veículo foi marcado como Vendido. Use "Ver contrato" na lista.', 'ok');
+    } else {
+      await api('/propostas/' + id + '/decisao', 'PUT', { aprovar: acao === 'aprovar' });
+      msg($('#m'), acao === 'aprovar' ? 'Proposta aprovada.' : 'Proposta recusada. O veículo voltou a ficar disponível.', 'ok');
+    }
+    await recarregar();
+  } catch (err) { msg($('#m'), err.message); b.disabled = false; }
+};
+
+if (CONFIG.USE_MOCK) {
+  $('#nova').hidden = true;
+  msg($('#m'), 'A tela de vendas precisa do back-end. Defina USE_MOCK como false em app.js e rode o Main.');
+} else {
+  if (!PODE_VENDER.includes(perfil)) {
+    $('#nova').hidden = true;
+    msg($('#m'), 'O seu perfil (' + perfil + ') não registra propostas. Você pode consultar a lista.', 'ok');
+  }
+  recarregar();
+}
+</script>
+</body>
+</html>

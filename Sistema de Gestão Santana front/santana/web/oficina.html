@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Oficina - Sant'Ana</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<a class="skip" href="#main">Ir para o conteúdo</a>
+<header class="top" id="top"></header>
+<main id="main">
+  <h1>Oficina</h1>
+  <div id="m" class="msg" role="alert"></div>
+
+  <section class="card" aria-labelledby="h1a">
+    <h2 id="h1a">Agendar serviço</h2>
+    <form id="fa" novalidate>
+      <div class="row">
+        <div><label for="acliente">Cliente</label><select id="acliente"></select></div>
+        <div><label for="achassi">Veículo</label><select id="achassi"></select></div>
+        <div><label for="atec">Técnico</label><select id="atec"></select></div>
+        <div><label for="aini">Início</label><input id="aini" type="datetime-local"></div>
+        <div><label for="afim">Fim</label><input id="afim" type="datetime-local"></div>
+      </div>
+      <button type="submit">Agendar</button>
+    </form>
+  </section>
+  <section class="card tw" style="margin-top:1rem" aria-labelledby="h2a">
+    <h2 id="h2a">Agendamentos</h2>
+    <table><caption class="noprint">Agendamentos da oficina</caption>
+      <thead><tr><th scope="col">Nº</th><th scope="col">Cliente</th><th scope="col">Chassi</th><th scope="col">Técnico</th><th scope="col">Período</th><th scope="col">Situação</th><th scope="col">Ação</th></tr></thead>
+      <tbody id="tag"></tbody></table>
+  </section>
+
+  <section class="card tw" style="margin-top:1rem" aria-labelledby="h3a">
+    <h2 id="h3a">Ordens de serviço</h2>
+    <table><caption class="noprint">Ordens de serviço</caption>
+      <thead><tr><th scope="col">OS</th><th scope="col">Cliente</th><th scope="col">Chassi</th><th scope="col">Situação</th><th scope="col">Subtotal</th><th scope="col">Ação</th></tr></thead>
+      <tbody id="tos"></tbody></table>
+    <div id="det" tabindex="-1" hidden></div>
+  </section>
+
+  <section class="card" style="margin-top:1rem" aria-labelledby="h4a">
+    <h2 id="h4a">Lançar peça ou serviço</h2>
+    <form id="fi" novalidate>
+      <div class="row">
+        <div><label for="ios">OS em execução</label><select id="ios"></select></div>
+        <div><label for="itipo">Tipo</label><select id="itipo"><option value="PECA">Peça</option><option value="SERVICO">Serviço</option></select></div>
+        <div><label for="ipeca">Peça (se tipo Peça)</label><select id="ipeca"></select></div>
+        <div><label for="idesc">Descrição (se Serviço)</label><input id="idesc"></div>
+        <div><label for="ival">Valor unitário (Serviço)</label><input id="ival" type="number" min="0.01" step="0.01"></div>
+        <div><label for="iqtd">Quantidade</label><input id="iqtd" type="number" min="1" value="1"></div>
+      </div>
+      <button type="submit">Lançar</button>
+    </form>
+  </section>
+
+  <section class="card tw" style="margin-top:1rem" aria-labelledby="h5a">
+    <h2 id="h5a">Peças e técnicos</h2>
+    <div id="admin">
+      <form id="ft" class="row"><div><label for="tnome">Novo técnico</label><input id="tnome"></div><button type="submit">Cadastrar técnico</button></form>
+      <form id="fp" class="row">
+        <div><label for="pcod">Código</label><input id="pcod"></div><div><label for="pdesc">Descrição</label><input id="pdesc"></div>
+        <div><label for="pval">Valor</label><input id="pval" type="number" min="0.01" step="0.01"></div><div><label for="psaldo">Saldo</label><input id="psaldo" type="number" min="0" value="0"></div>
+        <button type="submit">Cadastrar peça</button></form>
+      <form id="fr" class="row">
+        <div><label for="rpeca">Repor estoque da peça</label><select id="rpeca"></select></div>
+        <div><label for="rqtd">Quantidade</label><input id="rqtd" type="number" min="1" value="1"></div><button type="submit">Repor</button></form>
+    </div>
+    <p id="tecs"></p>
+    <table><caption>Estoque de peças</caption>
+      <thead><tr><th scope="col">Código</th><th scope="col">Descrição</th><th scope="col">Valor</th><th scope="col">Saldo</th></tr></thead>
+      <tbody id="tpc"></tbody></table>
+  </section>
+</main>
+<script src="app.js"></script>
+<script>
+shell('oficina.html');
+const GER = ['Gerente de Vendas', 'Administrador'].includes(sessionStorage.perfil);
+const cor = { AGENDADO: 'Aguardando', CONVERTIDO: 'Vendida', CANCELADO: 'Recusada', ABERTA: 'Aguardando', EM_EXECUCAO: 'Aprovada', CONCLUIDA: 'Vendida', FATURADA: 'Vendida' };
+const sel = (e, v) => '<span class="badge s-' + cor[e] + '">' + esc(e.replace('_', ' ')) + '</span>';
+async function carregar() {
+  try {
+    const [cl, ve, tec, pc, ag, os] = await Promise.all([api('/clientes'), api('/veiculos'), api('/oficina/tecnicos'), api('/oficina/pecas'), api('/oficina/agendamentos'), api('/oficina/os')]);
+    opcoes('#acliente', 'Cliente', cl, c => c.id, c => c.codigo + ' · ' + c.nome);
+    opcoes('#achassi', 'Veículo', ve, v => v.chassi, v => v.marca + ' ' + v.modelo + ' · ' + v.chassi);
+    opcoes('#atec', 'Técnico', tec, t => t.id, t => t.nome);
+    opcoes('#ipeca', 'Peça', pc, p => p.id, p => p.codigo + ' · ' + p.descricao + ' (saldo ' + p.saldo + ')');
+    opcoes('#rpeca', 'Peça', pc, p => p.id, p => p.codigo + ' · ' + p.descricao);
+    opcoes('#ios', 'Selecione a OS', os.filter(o => o.estado === 'EM_EXECUCAO'), o => o.id, o => 'OS ' + o.id + ' · ' + o.cliente);
+    $('#tecs').textContent = 'Técnicos: ' + (tec.map(t => t.nome).join(', ') || 'nenhum cadastrado');
+    $('#tpc').innerHTML = pc.map(p => '<tr><td>' + esc(p.codigo) + '</td><td>' + esc(p.descricao) + '</td><td>' + brl(p.valorUnitario) + '</td><td>' + p.saldo + '</td></tr>').join('');
+    $('#tag').innerHTML = ag.map(a => '<tr><th scope="row">' + a.id + '</th><td>' + esc(a.cliente) + '</td><td>' + esc(a.chassi) + '</td><td>' + esc(a.tecnico) + '</td><td>' +
+      dh(a.inicio) + ' a ' + dh(a.fim) + '</td><td>' + sel(a.estado) + '</td><td>' +
+      (a.estado === 'AGENDADO' ? btn('/oficina/agendamentos/' + a.id + '/os', 'Abrir OS', 'POST') + btn('/oficina/agendamentos/' + a.id + '/cancelamento', 'Cancelar', 'PUT', '', '', 'sec') : a.osId ? 'OS ' + a.osId : '—') + '</td></tr>').join('');
+    $('#tos').innerHTML = os.map(o => '<tr><th scope="row">' + o.id + '</th><td>' + esc(o.cliente) + '</td><td>' + esc(o.chassi) + '</td><td>' + sel(o.estado) + '</td><td>' + brl(o.subtotal) + '</td><td>' +
+      (o.estado === 'ABERTA' ? btn('/oficina/os/' + o.id + '/inicio', 'Iniciar') : o.estado === 'EM_EXECUCAO' ? btn('/oficina/os/' + o.id + '/conclusao', 'Concluir')
+        : o.estado === 'CONCLUIDA' ? (GER ? btn('/oficina/os/' + o.id + '/fatura', 'Faturar', 'POST') : 'Aguardando o gerente') : '') +
+      '<button type="button" class="sec" data-d="' + o.id + '">Detalhes</button></td></tr>').join('');
+  } catch (err) { msg($('#m'), err.message); }
+}
+ligar($('#tag'), carregar, 'Agendamento atualizado.');
+ligar($('#tos'), carregar, 'OS atualizada.');
+$('#tos').addEventListener('click', async e => {
+  const b = e.target.closest('button[data-d]'); if (!b) return;
+  try {
+    const o = await api('/oficina/os/' + b.dataset.d), d = $('#det');
+    d.hidden = false;
+    d.innerHTML = '<h3>OS ' + o.id + '</h3>' + (o.itens.length ? '<ul>' + o.itens.map(i => '<li>' + (i.tipo === 'PECA' ? 'Peça' : 'Serviço') + ': ' + esc(i.descricao) + ' × ' + i.quantidade + ' = ' + brl(i.total) + '</li>').join('') + '</ul>' : '<p>Nenhum item lançado.</p>') +
+      '<p>Subtotal: ' + brl(o.subtotal) + '</p>' + (o.fatura ? '<p>Fatura: imposto ' + brl(o.fatura.imposto) + ', total ' + brl(o.fatura.total) + '.</p>' : '');
+    d.focus();
+  } catch (err) { msg($('#m'), err.message); }
+});
+async function enviar(e, caminho, corpo, ok) {
+  e.preventDefault();
+  try { await api(caminho, 'POST', corpo); msg($('#m'), ok, 'ok'); e.target.reset(); await carregar(); }
+  catch (err) { msg($('#m'), err.message); }
+}
+$('#fa').onsubmit = e => {
+  const i = $('#aini').value, f = $('#afim').value;
+  if (!$('#acliente').value || !$('#achassi').value || !$('#atec').value || !i || !f || f <= i) { e.preventDefault(); return msg($('#m'), 'Preencha tudo e use um fim depois do início.'); }
+  enviar(e, '/oficina/agendamentos', { clienteId: Number($('#acliente').value), chassi: $('#achassi').value, tecnicoId: Number($('#atec').value), inicio: new Date(i).toISOString(), fim: new Date(f).toISOString() }, 'Serviço agendado.');
+};
+$('#fi').onsubmit = e => {
+  const os = $('#ios').value, q = Number($('#iqtd').value), peca = $('#itipo').value === 'PECA';
+  if (!os) { e.preventDefault(); return msg($('#m'), 'Selecione uma OS em execução. Abra e inicie a OS antes.'); }
+  enviar(e, '/oficina/os/' + os + '/itens', peca ? { tipo: 'PECA', pecaId: Number($('#ipeca').value), quantidade: q }
+    : { tipo: 'SERVICO', descricao: $('#idesc').value, valorUnitario: Number($('#ival').value), quantidade: q }, 'Item lançado.');
+};
+$('#ft').onsubmit = e => enviar(e, '/oficina/tecnicos', { nome: $('#tnome').value }, 'Técnico cadastrado.');
+$('#fp').onsubmit = e => enviar(e, '/oficina/pecas', { codigo: $('#pcod').value, descricao: $('#pdesc').value, valorUnitario: Number($('#pval').value), saldo: Number($('#psaldo').value) }, 'Peça cadastrada.');
+$('#fr').onsubmit = e => { if (!$('#rpeca').value) { e.preventDefault(); return msg($('#m'), 'Selecione a peça.'); } enviar(e, '/oficina/pecas/' + $('#rpeca').value + '/reposicao', { quantidade: Number($('#rqtd').value) }, 'Estoque reposto.'); };
+if (!GER) $('#admin').hidden = true;
+if (CONFIG.USE_MOCK) msg($('#m'), 'Esta tela precisa do back-end. Defina USE_MOCK como false em app.js.');
+else carregar();
+</script>
+</body></html>
